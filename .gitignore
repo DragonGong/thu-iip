@@ -1,0 +1,10 @@
+# /exp2/data
+/exp2/sync
+/.idea
+.DS_Store
+/exp1/data
+.vscode
+/report_draft
+*.zip
+report
+__pycache__
