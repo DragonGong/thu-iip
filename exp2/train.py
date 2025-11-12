@@ -7,7 +7,7 @@ from torch.utils.data import Dataset, DataLoader
 from transformers import BertTokenizer, set_seed
 from sklearn.metrics import accuracy_score, f1_score
 from model import BertForSimilarity
-from utils import load_synonym_dict, synonym_replace, FreeLB
+from utils import synonym_replace, FreeLB
 import random 
 from tqdm import tqdm 
 set_seed(42)
@@ -66,18 +66,20 @@ def main():
     print("data loaded")
     # 数据增强：对训练集部分样本进行同义词替换
     print("Loading synonym dictionary...")
-    # syn_dict = load_synonym_dict('syn_dict/synonym.txt')
-    # augmented_rows = []
-    # for _, row in train_df.iterrows():
-    #     if random.random() < 0.5:  # 50% 概率增强
-    #         new_row = row.copy()
-    #         if random.random() < 0.5:
-    #             new_row['Query1'] = synonym_replace(row['Query1'], syn_dict)
-    #         else:
-    #             new_row['Query2'] = synonym_replace(row['Query2'], syn_dict)
-    #         augmented_rows.append(new_row)
-    # train_df_aug = pd.concat([train_df, pd.DataFrame(augmented_rows)], ignore_index=True)
-    train_df_aug = train_df
+    augmented_rows = []
+    for _, row in train_df.iterrows():
+        if random.random() < 0.5:  # 50% 概率增强
+            new_row = row.copy()
+            if random.random() < 0.5:
+                new_row['query1'] = synonym_replace(row['query1'], replace_prob=0.3)
+            else:
+                new_row['query2'] = synonym_replace(row['query2'], replace_prob=0.3)
+            augmented_rows.append(new_row)
+    if augmented_rows:
+        print("aug is enhanced")
+        train_df_aug = pd.concat([train_df, pd.DataFrame(augmented_rows)], ignore_index=True)
+    else:
+        train_df_aug = train_df
     print(f"Original train size: {len(train_df)}, Augmented: {len(train_df_aug)}")
 
     train_dataset = SimilarityDataset(train_df_aug, tokenizer)

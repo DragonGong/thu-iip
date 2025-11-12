@@ -5,33 +5,60 @@ import numpy as np
 from tqdm import tqdm
 from collections import defaultdict
 
-# ----------------------------
-# 同义词词林加载（哈工大扩展版）
-# 下载地址：https://github.com/liuhuanyong/ChineseDictionary
-# 放在 syn_dict/synonym.txt
-# 格式示例：
-# Aa01A01=人 人类 人物 人士 个体...
-# ----------------------------
-def load_synonym_dict(path='syn_dict/synonym.txt'):
-    syn_dict = defaultdict(list)
-    with open(path, 'r', encoding='utf-8') as f:
-        for line in f:
-            if '=' in line:
-                _, words = line.strip().split('=', 1)
-                word_list = words.split(' ')
-                for w in word_list:
-                    syn_dict[w].extend([x for x in word_list if x != w])
-    return dict(syn_dict)
+try:
+    import OpenHowNet
+    hownet_dict = OpenHowNet.HowNetDict()
+    HOWNET_AVAILABLE = True
+except ImportError:
+    print("Warning: OpenHowNet not installed. Synonym replacement will be disabled.")
+    HOWNET_AVAILABLE = False
 
-# 同义词替换（仅对 Query1 或 Query2 中的一个做增强）
-def synonym_replace(sentence, syn_dict, replace_prob=0.3):
-    words = list(sentence)
+def get_synonyms(word, topk=5):
+    """从 HowNet 获取同义词（近义词）"""
+    if not HOWNET_AVAILABLE:
+        return []
+    try:
+        # 获取该词的所有 sense（义项）
+        senses = hownet_dict.get_sense(word)
+        synonyms = set()
+        for sense in senses:
+            # 获取与当前义项语义相似的其他词
+            similar_words = hownet_dict.get_related_words(sense["word"], relation="antonym", merge=True)
+            # 注意：HowNet 的 "similar" 关系不稳定，更推荐用 "same_sememe" 或直接查同 sememe 的词
+            # 更稳妥方式：查找具有相同核心语义（sememe）的词
+            sememes = sense["sememes"]
+            for w in hownet_dict.get_all_words():
+                if w == word:
+                    continue
+                wsenses = hownet_dict.get_sense(w)
+                for ws in wsenses:
+                    if set(sememes).issubset(set(ws["sememes"])):
+                        synonyms.add(w)
+                        if len(synonyms) >= topk:
+                            break
+                if len(synonyms) >= topk:
+                    break
+        return list(synonyms)[:topk]
+    except Exception as e:
+        # 某些词可能不在 HowNet 中，或解析失败
+        return []
+
+def synonym_replace(sentence, replace_prob=0.3, topk=5):
+    """
+    对句子中的每个字/词（按字处理，也可改为分词）尝试同义替换。
+    注意：这里按「字」处理以兼容原始代码（Query1/Query2 是字符串）。
+    若需更高精度，建议先分词（如 jieba），但会增加依赖。
+    """
+    if not HOWNET_AVAILABLE:
+        return sentence  # 无法替换，原样返回
+
+    words = list(sentence)  # 按字切分（简单处理）
     new_words = words.copy()
-    for i, w in enumerate(words):
-        if w in syn_dict and random.random() < replace_prob:
-            candidates = syn_dict[w]
-            if candidates:
-                new_words[i] = random.choice(candidates)
+    for i, char in enumerate(words):
+        if random.random() < replace_prob:
+            syns = get_synonyms(char, topk=topk)
+            if syns:
+                new_words[i] = random.choice(syns)
     return ''.join(new_words)
 
 # ----------------------------
